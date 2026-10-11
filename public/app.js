@@ -318,6 +318,7 @@ function renderAddressCards(calculatedList, isAdmin = false) {
 
     // Кнопки дій для адміністратора
     const adminActionButtons = isAdmin ? `
+      <button class="btn-icon-action" onclick="openReadingModal(${item.id})" title="Коригувати показники лічильника">⏱️</button>
       <button class="btn-icon-action" onclick="openSingleAddressTariff(${item.id})" title="Редагувати назву або тариф">✏️</button>
       <button class="btn-icon-action btn-delete-card" onclick="openDeleteAddressModal(${item.id})" title="Видалити адресу">🗑️</button>
     ` : '';
@@ -327,6 +328,24 @@ function renderAddressCards(calculatedList, isAdmin = false) {
         Змінити тариф
       </button>
     ` : '';
+
+    // Спеціальне сповіщення на картці, якщо внесено некоректне число (менше за попередній)
+    const errorAlertHtml = item.isNegative ? `
+      <div class="card-warning-alert">
+        <span>⚠️ Показник (${item.curr} м³) менший за попер. (${item.prev} м³)!</span>
+        <button class="btn-alert-fix" onclick="event.stopPropagation(); openReadingModal(${item.id})">🛠️ Виправити</button>
+      </div>
+    ` : '';
+
+    let enterBtnClass = 'btn-tap-enter';
+    let enterBtnText = '✍️ Внести';
+    if (item.isNegative) {
+      enterBtnClass = 'btn-tap-enter btn-err';
+      enterBtnText = '🛠️ Виправити';
+    } else if (item.hasCurrent) {
+      enterBtnClass = `btn-tap-enter ${isAdmin ? 'btn-fix' : ''}`;
+      enterBtnText = isAdmin ? '✏️ Змінити' : '✏️ Змінити';
+    }
 
     card.innerHTML = `
       <div class="card-header">
@@ -354,11 +373,13 @@ function renderAddressCards(calculatedList, isAdmin = false) {
               }
             </div>
           </div>
-          <button class="btn-tap-enter" onclick="event.stopPropagation(); openReadingModal(${item.id})">
-            ${item.hasCurrent ? '✏️ Змінити' : '✍️ Ввести'}
+          <button class="${enterBtnClass}" onclick="event.stopPropagation(); openReadingModal(${item.id})">
+            ${enterBtnText}
           </button>
         </div>
       </div>
+
+      ${errorAlertHtml}
 
       <div class="consumption-delta-row">
         <span class="delta-label">Різниця споживання:</span>
@@ -400,10 +421,54 @@ function openReadingModal(id) {
 
   activeReadingAddressId = id;
   const index = addresses.findIndex(a => a.id === id);
+  const isAdmin = checkIsAdmin();
+
+  const titleEl = document.getElementById('readingModalTitle');
+  if (titleEl) {
+    titleEl.textContent = isAdmin ? '👑 Коригування показника' : '⏱️ Внесення показника';
+  }
 
   document.getElementById('readingModalBadge').textContent = `Адреса #${index + 1}`;
   document.getElementById('readingModalAddressName').textContent = item.name;
-  document.getElementById('readingModalPrevVal').textContent = `${(parseFloat(item.previousReading) || 0).toFixed(2)} м³`;
+
+  // Адмінські елементи
+  const adminBadge = document.getElementById('adminModalBadge');
+  if (adminBadge) adminBadge.style.display = isAdmin ? 'flex' : 'none';
+
+  const prevBox = document.getElementById('readingModalPrevBox');
+  const adminPrevField = document.getElementById('adminPrevReadingField');
+  const adminPrevInput = document.getElementById('inputModalPrevReading');
+
+  if (isAdmin) {
+    if (prevBox) prevBox.style.display = 'none';
+    if (adminPrevField) adminPrevField.style.display = 'block';
+    if (adminPrevInput) {
+      adminPrevInput.value = (parseFloat(item.previousReading) || 0).toFixed(2);
+    }
+  } else {
+    if (prevBox) prevBox.style.display = 'flex';
+    if (adminPrevField) adminPrevField.style.display = 'none';
+    const prevValEl = document.getElementById('readingModalPrevVal');
+    if (prevValEl) {
+      prevValEl.textContent = `${(parseFloat(item.previousReading) || 0).toFixed(2)} м³`;
+    }
+  }
+
+  // Кнопка очищення внесеного показника для адміна
+  const clearBox = document.getElementById('adminClearReadingBox');
+  if (clearBox) {
+    clearBox.style.display = (isAdmin && item.currentReading !== '' && item.currentReading !== null) ? 'block' : 'none';
+  }
+
+  const hintEl = document.getElementById('readingCorrectionHint');
+  if (hintEl) {
+    hintEl.style.display = isAdmin ? 'inline' : 'none';
+  }
+
+  const btnConfirmText = document.getElementById('btnModalConfirmReadingText');
+  if (btnConfirmText) {
+    btnConfirmText.textContent = isAdmin ? '✅ Зберегти та перерахувати' : '✅ ОК (Підтвердити)';
+  }
 
   const input = document.getElementById('inputModalReading');
   input.value = item.currentReading !== '' && item.currentReading !== null ? item.currentReading : '';
@@ -422,7 +487,20 @@ function updateModalCalcPreview() {
   const item = addresses.find(a => a.id === activeReadingAddressId);
   if (!item) return;
 
-  const prev = parseFloat(item.previousReading) || 0;
+  const isAdmin = checkIsAdmin();
+  let prev = parseFloat(item.previousReading) || 0;
+
+  // Якщо адмін ввів виправлений базовий показник у формі
+  if (isAdmin) {
+    const adminPrevInput = document.getElementById('inputModalPrevReading');
+    if (adminPrevInput && adminPrevInput.value.trim() !== '') {
+      const parsed = parseFloat(adminPrevInput.value);
+      if (!isNaN(parsed)) {
+        prev = parsed;
+      }
+    }
+  }
+
   const inputVal = document.getElementById('inputModalReading').value.trim();
   const supplyRate = parseFloat(item.supplyRate) || 0;
   const drainageRate = parseFloat(item.drainageRate) || 0;
@@ -449,7 +527,7 @@ function updateModalCalcPreview() {
   const delta = round2(curr - prev);
   if (delta < 0) {
     warningEl.style.display = 'block';
-    warningEl.textContent = `⚠️ Поточний показник (${curr}) менший за попередній (${prev})!`;
+    warningEl.textContent = `⚠️ Поточний показник (${curr}) менший за попередній (${prev})! Вкажіть правильну цифру.`;
   } else {
     warningEl.style.display = 'none';
   }
@@ -465,8 +543,31 @@ function updateModalCalcPreview() {
   document.getElementById('modalCalcTotalCost').textContent = `${total.toFixed(2)} грн`;
 }
 
-// Слухач на введення в модалці
+// Слухачі введення в модалці
 document.getElementById('inputModalReading').addEventListener('input', updateModalCalcPreview);
+
+const inputModalPrevReadingEl = document.getElementById('inputModalPrevReading');
+if (inputModalPrevReadingEl) {
+  inputModalPrevReadingEl.addEventListener('input', updateModalCalcPreview);
+}
+
+// Кнопка очищення / скидання внесеного показника (тільки адмін)
+const btnModalClearReadingEl = document.getElementById('btnModalClearReading');
+if (btnModalClearReadingEl) {
+  btnModalClearReadingEl.addEventListener('click', () => {
+    if (activeReadingAddressId === null) return;
+    const item = addresses.find(a => a.id === activeReadingAddressId);
+    if (!item) return;
+
+    item.currentReading = '';
+    saveToLocalStorage();
+    debouncedSync();
+    renderApp();
+    closeModal('readingModal');
+    triggerHaptic('warning');
+    showToast(`🧹 Показник для "${item.name}" очищено! Всі суми перераховано.`);
+  });
+}
 
 // Підтвердження введення кнопкою ОК або Enter
 function confirmReading() {
@@ -474,7 +575,27 @@ function confirmReading() {
   const item = addresses.find(a => a.id === activeReadingAddressId);
   if (!item) return;
 
+  const isAdmin = checkIsAdmin();
   const inputVal = document.getElementById('inputModalReading').value.trim();
+
+  // Якщо адміністратор скоригував базовий попередній показник
+  let prevChanged = false;
+  if (isAdmin) {
+    const adminPrevInput = document.getElementById('inputModalPrevReading');
+    if (adminPrevInput && adminPrevInput.value.trim() !== '') {
+      const newPrev = parseFloat(adminPrevInput.value);
+      if (!isNaN(newPrev) && newPrev >= 0) {
+        if (round2(newPrev) !== round2(item.previousReading)) {
+          item.previousReading = round2(newPrev);
+          prevChanged = true;
+        }
+      }
+    }
+  }
+
+  const prevReading = parseFloat(item.previousReading) || 0;
+  const newCurr = inputVal !== '' ? parseFloat(inputVal) : NaN;
+
   item.currentReading = inputVal;
 
   saveToLocalStorage();
@@ -482,7 +603,20 @@ function confirmReading() {
   renderApp();
   closeModal('readingModal');
   triggerHaptic('success');
-  showToast(`Показник для "${item.name}" збережено! ✅`);
+
+  if (isAdmin) {
+    if (prevChanged) {
+      showToast(`Базовий та поточний показники для "${item.name}" оновлено! Суми перераховано. 🔄`);
+    } else {
+      showToast(`Показник для "${item.name}" виправлено та перераховано! 🔄`);
+    }
+  } else {
+    if (!isNaN(newCurr) && newCurr < prevReading) {
+      showToast(`⚠️ Увага: показник менший за попередній (${newCurr} < ${prevReading})`);
+    } else {
+      showToast(`Показник для "${item.name}" збережено! ✅`);
+    }
+  }
 }
 
 document.getElementById('btnModalConfirmReading').addEventListener('click', confirmReading);

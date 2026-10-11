@@ -71,12 +71,13 @@ app.post('/api/addresses', (req, res) => {
         const orig = existing.find(e => e.id === Number(item.id));
         if (!orig) return true;
         return orig.name !== item.name || 
+               Number(orig.previousReading) !== Number(item.previousReading) ||
                Number(orig.supplyRate) !== Number(item.supplyRate) || 
                Number(orig.drainageRate) !== Number(item.drainageRate);
       });
 
       if (hasTariffOrNameChanges && !isAdminRequest(req)) {
-        return res.status(403).json({ error: 'Зміна назв та тарифів доступна лише адміністратору (@nicetry00)' });
+        return res.status(403).json({ error: 'Зміна назв, тарифів та початкових показників доступна лише адміністратору (@nicetry00)' });
       }
 
       storageService.saveAddresses(req.body);

@@ -135,13 +135,42 @@
             <h4 id="readingModalAddressName">вул. Шевченка, 12</h4>
           </div>
 
-          <div class="prev-info-box">
+          <!-- Адмінський бейдж режиму коригування -->
+          <div id="adminModalBadge" class="admin-modal-badge" style="display: none;">
+            <span>👑 Панель коригування адміністратора (@nicetry00)</span>
+          </div>
+
+          <!-- Для користувачів: статичний попередній показник -->
+          <div class="prev-info-box" id="readingModalPrevBox">
             <span class="prev-info-label">Попередній внесений показник:</span>
             <b class="prev-info-val" id="readingModalPrevVal">0.00 м³</b>
           </div>
 
+          <!-- Для адміністратора: поле редагування базового показника -->
+          <div id="adminPrevReadingField" class="input-field admin-field-box" style="display: none;">
+            <div class="admin-field-header">
+              <label for="inputModalPrevReading">⚙️ Базовий попередній показник:</label>
+              <span class="badge-admin-tag">👑 Тільки адмін</span>
+            </div>
+            <div class="modal-input-wrapper">
+              <input 
+                type="number" 
+                step="0.01" 
+                id="inputModalPrevReading" 
+                class="modal-secondary-meter-input" 
+                placeholder="0.00" 
+                inputmode="decimal"
+              />
+              <span class="unit-tag">м³</span>
+            </div>
+            <span class="input-subnote">Змініть тут, якщо базовий показник було внесено помилково</span>
+          </div>
+
           <div class="input-field reading-input-field">
-            <label for="inputModalReading">Поточний показник лічильника:</label>
+            <div class="field-label-row">
+              <label for="inputModalReading">Поточний показник лічильника:</label>
+              <span id="readingCorrectionHint" class="admin-edit-hint" style="display: none;">(можна виправити на правильний)</span>
+            </div>
             <div class="modal-input-wrapper">
               <input 
                 type="number" 
@@ -153,6 +182,14 @@
               />
               <span class="unit-tag">м³</span>
             </div>
+          </div>
+
+          <!-- Кнопка очищення / скидання помилково внесеного показника для адміна -->
+          <div id="adminClearReadingBox" class="admin-clear-box" style="display: none;">
+            <button type="button" id="btnModalClearReading" class="btn-clear-reading">
+              🧹 Очистити внесений показник (скинути помилку)
+            </button>
+            <p class="admin-clear-note">Поверне адресу до статусу «Очікує показник» та автоматично перерахує загальну суму.</p>
           </div>
 
           <!-- Live calculation preview inside modal -->
@@ -185,7 +222,7 @@
         <div class="modal-footer">
           <button class="btn-secondary" data-close="readingModal">Скасувати</button>
           <button id="btnModalConfirmReading" class="btn-primary btn-large">
-            <span>✅ ОК (Підтвердити)</span>
+            <span id="btnModalConfirmReadingText">✅ ОК (Підтвердити)</span>
           </button>
         </div>
       </div>

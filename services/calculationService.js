@@ -80,8 +80,11 @@ function calculateAll(addressesList) {
     totals: {
       totalSupplyCost,
       totalDrainageCost,
+      totalSupply: totalSupplyCost,
+      totalDrainage: totalDrainageCost,
       grandTotal,
       totalConsumption,
+      totalVolume: totalConsumption,
       filledCount,
       totalAddresses: items.length
     }
