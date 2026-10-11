@@ -12,19 +12,15 @@ if (!fs.existsSync(DATA_DIR)) {
 }
 
 function getDefaultAddresses() {
-  const defaultList = [];
-  for (let i = 1; i <= 10; i++) {
-    defaultList.push({
-      id: i,
-      name: `Адреса ${i}`,
-      previousReading: 0,
-      currentReading: '',
-      supplyRate: 23.00,
-      drainageRate: 16.50,
-      note: ''
-    });
-  }
-  return defaultList;
+  return [
+    { id: 1, name: 'Ряшівська 9', previousReading: 2169, currentReading: '', supplyRate: 37.00, drainageRate: 21.00, note: '' },
+    { id: 2, name: 'Вагонна 20', previousReading: 1250, currentReading: '', supplyRate: 37.00, drainageRate: 21.00, note: '' },
+    { id: 3, name: 'Кульпарківська 176', previousReading: 865, currentReading: '', supplyRate: 37.00, drainageRate: 21.00, note: '' },
+    { id: 4, name: 'Хоткевича 28', previousReading: 998, currentReading: '', supplyRate: 37.00, drainageRate: 21.00, note: '' },
+    { id: 5, name: 'ЧК 67', previousReading: 193, currentReading: '', supplyRate: 37.00, drainageRate: 21.00, note: '' },
+    { id: 6, name: 'Антоненка-Давидовича 1', previousReading: 24, currentReading: '', supplyRate: 37.00, drainageRate: 21.00, note: '' },
+    { id: 7, name: 'ЧК98', previousReading: 1705, currentReading: '', supplyRate: 37.00, drainageRate: 21.00, note: '' }
+  ];
 }
 
 function getAddresses() {
@@ -102,6 +98,21 @@ function addHistoryEntry(entry) {
   }
 }
 
+function deleteHistoryEntry(id) {
+  try {
+    const history = getHistory();
+    const initialLen = history.length;
+    const filtered = history.filter(item => String(item.id) !== String(id));
+    if (filtered.length !== initialLen) {
+      fs.writeFileSync(HISTORY_FILE, JSON.stringify(filtered, null, 2), 'utf-8');
+      return true;
+    }
+  } catch (err) {
+    console.error('Помилка видалення запису з history.json:', err);
+  }
+  return false;
+}
+
 function addAddress(newAddress) {
   const list = getAddresses();
   const maxId = list.reduce((m, item) => Math.max(m, Number(item.id) || 0), 0);
@@ -155,7 +166,7 @@ function getConfig() {
       return JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf-8'));
     }
   } catch (e) {}
-  return { adminChatId: process.env.ADMIN_CHAT_ID || null, adminUsername: 'nicetry00' };
+  return { adminChatId: process.env.ADMIN_CHAT_ID || 521075324, adminUsername: 'nicetry00' };
 }
 
 function saveConfig(cfg) {
@@ -173,7 +184,7 @@ function setAdminChatId(chatId) {
 
 function getAdminChatId() {
   const cfg = getConfig();
-  return cfg.adminChatId || process.env.ADMIN_CHAT_ID || null;
+  return cfg.adminChatId || process.env.ADMIN_CHAT_ID || 521075324;
 }
 
 module.exports = {
@@ -184,6 +195,7 @@ module.exports = {
   deleteAddress,
   getHistory,
   addHistoryEntry,
+  deleteHistoryEntry,
   rolloverPeriod,
   getConfig,
   setAdminChatId,

@@ -1180,6 +1180,7 @@ body.modal-open .sticky-bottom-bar {
 .history-card-header {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   margin-bottom: 6px;
 }
 
@@ -1188,10 +1189,52 @@ body.modal-open .sticky-bottom-bar {
   color: var(--text-muted);
 }
 
+.history-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .history-total {
   font-size: 0.95rem;
   font-weight: 700;
   color: #38bdf8;
+}
+
+.btn-delete-history {
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  color: #f87171;
+  font-size: 0.75rem;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-delete-history:hover, .btn-delete-history:active {
+  background: rgba(239, 68, 68, 0.3);
+  border-color: #ef4444;
+  color: #ffffff;
+  transform: scale(1.08);
+}
+
+.admin-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.25), rgba(217, 119, 6, 0.15));
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  color: #fcd34d;
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 8px;
+  vertical-align: middle;
 }
 
 .history-details {

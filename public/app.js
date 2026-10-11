@@ -35,20 +35,50 @@ let activeDeleteAddressId = null;
 const LOCAL_STORAGE_KEY = 'aquacalc_water_addresses_v1';
 const LOCAL_STORAGE_HISTORY_KEY = 'aquacalc_water_history_v1';
 
+// Перевірка прав адміністратора (@nicetry00 / Chat ID 521075324)
+function checkIsAdmin() {
+  const user = tg?.initDataUnsafe?.user;
+  if (user) {
+    const uid = Number(user.id);
+    const uname = (user.username || '').toLowerCase();
+    if (uid === 521075324 || uname === 'nicetry00') {
+      return true;
+    }
+  }
+  const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.get('admin') === 'nicetry00' || urlParams.get('key') === '521075324') {
+    localStorage.setItem('aquacalc_admin_override', 'true');
+    return true;
+  }
+  if (localStorage.getItem('aquacalc_admin_override') === 'true') {
+    return true;
+  }
+  return false;
+}
+
+function getAuthHeaders() {
+  const headers = { 'Content-Type': 'application/json' };
+  const user = tg?.initDataUnsafe?.user;
+  if (user?.id) headers['x-admin-id'] = String(user.id);
+  if (user?.username) headers['x-admin-username'] = user.username;
+  if (tg?.initData) headers['x-telegram-init-data'] = tg.initData;
+  if (localStorage.getItem('aquacalc_admin_override') === 'true' || checkIsAdmin()) {
+    headers['x-admin-id'] = '521075324';
+    headers['x-admin-username'] = 'nicetry00';
+  }
+  return headers;
+}
+
 function generateDefaultAddresses() {
-  const defaults = [
-    { id: 1, name: 'Адреса 1 (вул. Шевченка, 12, кв. 4)', previousReading: 145.0, currentReading: '', supplyRate: 22.50, drainageRate: 16.80 },
-    { id: 2, name: 'Адреса 2 (вул. Франка, 45, кв. 18)', previousReading: 89.2, currentReading: '', supplyRate: 24.10, drainageRate: 17.50 },
-    { id: 3, name: 'Адреса 3 (просп. Соборний, 110, оф. 2)', previousReading: 210.5, currentReading: '', supplyRate: 25.00, drainageRate: 18.00 },
-    { id: 4, name: 'Адреса 4 (вул. Лесі Українки, 7, кв. 32)', previousReading: 64.0, currentReading: '', supplyRate: 21.80, drainageRate: 15.60 },
-    { id: 5, name: 'Адреса 5 (вул. Грушевського, 28, кв. 11)', previousReading: 312.4, currentReading: '', supplyRate: 22.50, drainageRate: 16.80 },
-    { id: 6, name: 'Адреса 6 (вул. Б. Хмельницького, 3, кв. 9)', previousReading: 178.6, currentReading: '', supplyRate: 23.40, drainageRate: 16.20 },
-    { id: 7, name: 'Адреса 7 (вул. Садова, 15, кв. 22)', previousReading: 95.0, currentReading: '', supplyRate: 22.00, drainageRate: 15.80 },
-    { id: 8, name: 'Адреса 8 (вул. Миру, 54, кв. 7)', previousReading: 140.8, currentReading: '', supplyRate: 26.20, drainageRate: 19.10 },
-    { id: 9, name: 'Адреса 9 (вул. Незалежності, 88, кв. 61)', previousReading: 52.3, currentReading: '', supplyRate: 21.50, drainageRate: 15.20 },
-    { id: 10, name: 'Адреса 10 (вул. Володимира Великого, 19)', previousReading: 230.1, currentReading: '', supplyRate: 23.00, drainageRate: 16.50 }
+  return [
+    { id: 1, name: 'Ряшівська 9', previousReading: 2169, currentReading: '', supplyRate: 37.00, drainageRate: 21.00, note: '' },
+    { id: 2, name: 'Вагонна 20', previousReading: 1250, currentReading: '', supplyRate: 37.00, drainageRate: 21.00, note: '' },
+    { id: 3, name: 'Кульпарківська 176', previousReading: 865, currentReading: '', supplyRate: 37.00, drainageRate: 21.00, note: '' },
+    { id: 4, name: 'Хоткевича 28', previousReading: 998, currentReading: '', supplyRate: 37.00, drainageRate: 21.00, note: '' },
+    { id: 5, name: 'ЧК 67', previousReading: 193, currentReading: '', supplyRate: 37.00, drainageRate: 21.00, note: '' },
+    { id: 6, name: 'Антоненка-Давидовича 1', previousReading: 24, currentReading: '', supplyRate: 37.00, drainageRate: 21.00, note: '' },
+    { id: 7, name: 'ЧК98', previousReading: 1705, currentReading: '', supplyRate: 37.00, drainageRate: 21.00, note: '' }
   ];
-  return defaults;
 }
 
 // ==================== 3. РОЗРАХУНКОВІ ФУНКЦІЇ ====================
@@ -166,7 +196,7 @@ async function syncWithServer() {
   try {
     await fetch('/api/addresses', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify(addresses)
     });
   } catch (e) {}
@@ -184,9 +214,29 @@ function debouncedSync() {
 function renderApp() {
   const calculated = addresses.map(calculateItem);
   const totals = calculateTotals(calculated);
+  const isAdmin = checkIsAdmin();
+
+  // Керування видимістю адміністративних кнопок
+  const btnTariffModal = document.getElementById('btnTariffModal');
+  const btnOpenAddAddress = document.getElementById('btnOpenAddAddress');
+  const appSubtitle = document.getElementById('appSubtitle');
+
+  if (btnTariffModal) {
+    btnTariffModal.style.display = isAdmin ? 'inline-flex' : 'none';
+  }
+  if (btnOpenAddAddress) {
+    btnOpenAddAddress.style.display = isAdmin ? 'inline-flex' : 'none';
+  }
+  if (appSubtitle) {
+    if (isAdmin) {
+      appSubtitle.innerHTML = 'Облік води • <span class="admin-badge">👑 Адміністратор (@nicetry00)</span>';
+    } else {
+      appSubtitle.textContent = 'Облік води по адресах';
+    }
+  }
 
   renderSummary(totals);
-  renderAddressCards(calculated);
+  renderAddressCards(calculated, isAdmin);
   updateFilterChips(calculated);
 }
 
@@ -228,7 +278,7 @@ function updateFilterChips(calculatedList) {
   if (chipEmpty) chipEmpty.textContent = `Очікують (${emptyCount})`;
 }
 
-function renderAddressCards(calculatedList) {
+function renderAddressCards(calculatedList, isAdmin = false) {
   const container = document.getElementById('addressesList');
   container.innerHTML = '';
 
@@ -266,6 +316,18 @@ function renderAddressCards(calculatedList) {
     const deltaSign = item.delta > 0 ? `+${item.delta.toFixed(2)}` : `${item.delta.toFixed(2)}`;
     const deltaClass = item.isNegative ? 'delta-value negative' : 'delta-value';
 
+    // Кнопки дій для адміністратора
+    const adminActionButtons = isAdmin ? `
+      <button class="btn-icon-action" onclick="openSingleAddressTariff(${item.id})" title="Редагувати назву або тариф">✏️</button>
+      <button class="btn-icon-action btn-delete-card" onclick="openDeleteAddressModal(${item.id})" title="Видалити адресу">🗑️</button>
+    ` : '';
+
+    const adminEditRatesBtn = isAdmin ? `
+      <button class="btn-card-edit-rates" onclick="openSingleAddressTariff(${item.id})">
+        Змінити тариф
+      </button>
+    ` : '';
+
     card.innerHTML = `
       <div class="card-header">
         <div class="card-title-group">
@@ -273,8 +335,7 @@ function renderAddressCards(calculatedList) {
           <span class="card-title" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</span>
         </div>
         <div class="card-actions-inline">
-          <button class="btn-icon-action" onclick="openSingleAddressTariff(${item.id})" title="Редагувати назву або тариф">✏️</button>
-          <button class="btn-icon-action btn-delete-card" onclick="openDeleteAddressModal(${item.id})" title="Видалити адресу">🗑️</button>
+          ${adminActionButtons}
           ${statusBadge}
         </div>
       </div>
@@ -309,9 +370,7 @@ function renderAddressCards(calculatedList) {
           <span class="rate-tag">💧 Вода: <b>${item.supplyRate.toFixed(2)} грн</b></span>
           <span class="rate-tag">🔄 Стік: <b>${item.drainageRate.toFixed(2)} грн</b></span>
         </div>
-        <button class="btn-card-edit-rates" onclick="openSingleAddressTariff(${item.id})">
-          Змінити тариф
-        </button>
+        ${adminEditRatesBtn}
       </div>
 
       <div class="card-results-bar">
@@ -450,6 +509,10 @@ document.getElementById('btnOpenAddAddress').addEventListener('click', () => {
 });
 
 document.getElementById('btnSaveNewAddress').addEventListener('click', async () => {
+  if (!checkIsAdmin()) {
+    showToast('🔒 Додавання адрес доступне лише адміністратору (@nicetry00)');
+    return;
+  }
   const name = document.getElementById('newAddressName').value.trim();
   const prev = parseFloat(document.getElementById('newAddressPrev').value) || 0;
   const sRate = parseFloat(document.getElementById('newAddressSupplyRate').value) || 23.00;
@@ -479,8 +542,12 @@ document.getElementById('btnSaveNewAddress').addEventListener('click', async () 
   showToast(`Адресу "${name}" успішно додано! ➕`);
 });
 
-// ВИДАЛЕННЯ АДРЕСИ
+// ВИДАЛЕННЯ АДРЕСИ (Тільки Адмін)
 function openDeleteAddressModal(id) {
+  if (!checkIsAdmin()) {
+    showToast('🔒 Видалення адрес доступне лише адміністратору (@nicetry00)');
+    return;
+  }
   const item = addresses.find(a => a.id === id);
   if (!item) return;
 
@@ -490,6 +557,10 @@ function openDeleteAddressModal(id) {
 }
 
 document.getElementById('btnConfirmDeleteAddress').addEventListener('click', async () => {
+  if (!checkIsAdmin()) {
+    showToast('🔒 Видалення адрес доступне лише адміністратору (@nicetry00)');
+    return;
+  }
   if (activeDeleteAddressId === null) return;
   const id = activeDeleteAddressId;
   const item = addresses.find(a => a.id === id);
@@ -499,7 +570,10 @@ document.getElementById('btnConfirmDeleteAddress').addEventListener('click', asy
   saveToLocalStorage();
   
   try {
-    await fetch(`/api/address/${id}`, { method: 'DELETE' });
+    await fetch(`/api/address/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders()
+    });
   } catch (e) {}
 
   renderApp();
@@ -593,6 +667,10 @@ function renderTariffModal() {
 }
 
 function openSingleAddressTariff(id) {
+  if (!checkIsAdmin()) {
+    showToast('🔒 Зміна тарифів та назв доступна лише адміністратору (@nicetry00)');
+    return;
+  }
   renderTariffModal();
   openModal('tariffModal');
   setTimeout(() => {
@@ -628,6 +706,10 @@ document.getElementById('btnApplyBulkRates').addEventListener('click', () => {
 });
 
 document.getElementById('btnSaveTariffs').addEventListener('click', () => {
+  if (!checkIsAdmin()) {
+    showToast('🔒 Зміна тарифів доступна лише адміністратору (@nicetry00)');
+    return;
+  }
   const rows = document.querySelectorAll('#tariffAddressesList .tariff-item-row');
   rows.forEach(row => {
     const nameInput = row.querySelector('input[data-type="name"]');
@@ -900,6 +982,7 @@ async function openHistoryModal() {
     return;
   }
 
+  const isAdmin = checkIsAdmin();
   list.innerHTML = '';
   history.forEach(item => {
     const date = new Date(item.createdAt || item.date);
@@ -909,19 +992,77 @@ async function openHistoryModal() {
 
     const card = document.createElement('div');
     card.className = 'history-card';
+    card.id = `history-card-${item.id}`;
+
+    const deleteBtn = isAdmin ? `
+      <button class="btn-delete-history" onclick="deleteHistoryItem('${item.id}', '${dateFormatted}', event)" title="Видалити запис з історії">🗑️</button>
+    ` : '';
+
+    const supplyDisplay = (item.totals?.totalSupplyCost || item.totals?.totalSupply || 0).toFixed(2);
+    const drainageDisplay = (item.totals?.totalDrainageCost || item.totals?.totalDrainage || 0).toFixed(2);
+    const volumeDisplay = (item.totals?.totalConsumption || item.totals?.totalVolume || 0).toFixed(2);
+    const grandDisplay = (item.totals?.grandTotal || 0).toFixed(2);
+
     card.innerHTML = `
       <div class="history-card-header">
         <span class="history-date">📅 ${dateFormatted}</span>
-        <span class="history-total">${item.totals.grandTotal.toFixed(2)} грн</span>
+        <div class="history-header-actions">
+          <span class="history-total">${grandDisplay} грн</span>
+          ${deleteBtn}
+        </div>
       </div>
       <div class="history-details">
-        <span>💧 Вода: <b>${item.totals.totalSupplyCost?.toFixed(2) || item.totals.totalSupply?.toFixed(2) || '0.00'} грн</b></span>
-        <span>🔄 Стік: <b>${item.totals.totalDrainageCost?.toFixed(2) || item.totals.totalDrainage?.toFixed(2) || '0.00'} грн</b></span>
-        <span>🌊 Об'єм: <b>${item.totals.totalConsumption?.toFixed(2) || item.totals.totalVolume?.toFixed(2) || '0.00'} м³</b></span>
+        <span>💧 Вода: <b>${supplyDisplay} грн</b></span>
+        <span>🔄 Стік: <b>${drainageDisplay} грн</b></span>
+        <span>🌊 Об'єм: <b>${volumeDisplay} м³</b></span>
       </div>
     `;
     list.appendChild(card);
   });
+}
+
+// Видалення запису з історії (Тільки Адмін)
+async function deleteHistoryItem(id, dateFormatted, event) {
+  if (event) event.stopPropagation();
+
+  if (!checkIsAdmin()) {
+    showToast('🔒 Видалення історії доступне лише адміністратору (@nicetry00)');
+    return;
+  }
+
+  const confirmed = confirm(`Видалити розрахунок за ${dateFormatted} з історії?`);
+  if (!confirmed) return;
+
+  try {
+    const res = await fetch(`/api/history/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders()
+    });
+    const data = await res.json();
+    if (data.success) {
+      triggerHaptic('success');
+      showToast('Запис видалено з історії 🗑️');
+      
+      const cardEl = document.getElementById(`history-card-${id}`);
+      if (cardEl) {
+        cardEl.style.transition = 'all 0.3s ease';
+        cardEl.style.opacity = '0';
+        cardEl.style.transform = 'scale(0.9)';
+        setTimeout(() => {
+          cardEl.remove();
+          const list = document.getElementById('historyList');
+          if (list && list.children.length === 0) {
+            list.innerHTML = '<p class="modal-desc" style="text-align:center;">Історія розрахунків порожня.</p>';
+          }
+        }, 300);
+      }
+    } else {
+      triggerHaptic('error');
+      showToast(data.error || 'Помилка видалення');
+    }
+  } catch (err) {
+    showToast('Помилка зв\'язку з сервером');
+  }
 }
 
 // ==================== 10. УТИЛІТИ ТА ПРИВ'ЯЗКА ПОДІЙ ====================
@@ -943,6 +1084,10 @@ function showToast(msg) {
 }
 
 document.getElementById('btnTariffModal').addEventListener('click', () => {
+  if (!checkIsAdmin()) {
+    showToast('🔒 Зміна тарифів доступна лише адміністратору (@nicetry00)');
+    return;
+  }
   renderTariffModal();
   openModal('tariffModal');
 });
@@ -970,5 +1115,6 @@ window.openReadingModal = openReadingModal;
 window.openSingleAddressTariff = openSingleAddressTariff;
 window.openDeleteAddressModal = openDeleteAddressModal;
 window.openEditAddressModal = openSingleAddressTariff;
+window.deleteHistoryItem = deleteHistoryItem;
 
 document.addEventListener('DOMContentLoaded', loadData);

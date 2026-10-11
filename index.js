@@ -24,7 +24,35 @@ const app = express();
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Отримати список всіх 10 адрес
+// Перевірка чи запит надійшов від адміністратора (@nicetry00 / ID 521075324)
+function isAdminRequest(req) {
+  const adminChatId = Number(storageService.getAdminChatId() || 521075324);
+  const headerId = Number(req.headers['x-admin-id'] || 0);
+  if (headerId === adminChatId || headerId === 521075324) return true;
+
+  const bodyId = Number(req.body?.adminId || req.body?.chatId || 0);
+  if (bodyId === adminChatId || bodyId === 521075324) return true;
+
+  const uname = (req.body?.username || req.headers['x-admin-username'] || '').toLowerCase();
+  if (uname === 'nicetry00') return true;
+
+  const initData = req.headers['x-telegram-init-data'] || req.body?.initData;
+  if (initData) {
+    try {
+      const params = new URLSearchParams(initData);
+      const userStr = params.get('user');
+      if (userStr) {
+        const u = JSON.parse(userStr);
+        if (Number(u.id) === adminChatId || Number(u.id) === 521075324 || (u.username || '').toLowerCase() === 'nicetry00') {
+          return true;
+        }
+      }
+    } catch (e) {}
+  }
+  return false;
+}
+
+// Отримати список всіх адрес
 app.get('/api/addresses', (req, res) => {
   try {
     const list = storageService.getAddresses();
@@ -38,6 +66,19 @@ app.get('/api/addresses', (req, res) => {
 app.post('/api/addresses', (req, res) => {
   try {
     if (Array.isArray(req.body)) {
+      const existing = storageService.getAddresses();
+      const hasTariffOrNameChanges = req.body.some(item => {
+        const orig = existing.find(e => e.id === Number(item.id));
+        if (!orig) return true;
+        return orig.name !== item.name || 
+               Number(orig.supplyRate) !== Number(item.supplyRate) || 
+               Number(orig.drainageRate) !== Number(item.drainageRate);
+      });
+
+      if (hasTariffOrNameChanges && !isAdminRequest(req)) {
+        return res.status(403).json({ error: 'Зміна назв та тарифів доступна лише адміністратору (@nicetry00)' });
+      }
+
       storageService.saveAddresses(req.body);
       res.json({ success: true, count: req.body.length });
     } else {
@@ -51,6 +92,10 @@ app.post('/api/addresses', (req, res) => {
 // Оновити одну адресу
 app.post('/api/address/:id', (req, res) => {
   try {
+    const isOnlyReading = Object.keys(req.body).every(k => k === 'currentReading' || k === 'note' || k === 'id');
+    if (!isOnlyReading && !isAdminRequest(req)) {
+      return res.status(403).json({ error: 'Редагування адрес та тарифів доступне лише адміністратору (@nicetry00)' });
+    }
     const updated = storageService.updateAddress(req.params.id, req.body);
     if (updated) {
       res.json({ success: true, address: updated });
@@ -62,9 +107,12 @@ app.post('/api/address/:id', (req, res) => {
   }
 });
 
-// Додати нову адресу
+// Додати нову адресу (Тільки Адмін)
 app.post('/api/address', (req, res) => {
   try {
+    if (!isAdminRequest(req)) {
+      return res.status(403).json({ error: 'Додавання нових адрес доступне лише адміністратору (@nicetry00)' });
+    }
     const created = storageService.addAddress(req.body);
     res.json({ success: true, address: created });
   } catch (err) {
@@ -72,9 +120,12 @@ app.post('/api/address', (req, res) => {
   }
 });
 
-// Видалити адресу
+// Видалити адресу (Тільки Адмін)
 app.delete('/api/address/:id', (req, res) => {
   try {
+    if (!isAdminRequest(req)) {
+      return res.status(403).json({ error: 'Видалення адрес доступне лише адміністратору (@nicetry00)' });
+    }
     const ok = storageService.deleteAddress(req.params.id);
     if (ok) {
       res.json({ success: true, message: 'Адресу видалено' });
@@ -102,6 +153,23 @@ app.get('/api/history', (req, res) => {
   try {
     const history = storageService.getHistory();
     res.json(history);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Видалити запис з історії (Тільки Адмін)
+app.delete('/api/history/:id', (req, res) => {
+  try {
+    if (!isAdminRequest(req)) {
+      return res.status(403).json({ error: 'Видалення записів з історії доступне лише адміністратору (@nicetry00)' });
+    }
+    const ok = storageService.deleteHistoryEntry(req.params.id);
+    if (ok) {
+      res.json({ success: true, message: 'Запис успішно видалено з історії' });
+    } else {
+      res.status(404).json({ error: 'Запис не знайдено' });
+    }
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
