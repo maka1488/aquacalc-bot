@@ -731,12 +731,17 @@ async function copyReportToClipboard() {
 }
 
 async function sendReportToTelegram() {
-  const text = generateReportText();
   const calculated = addresses.map(calculateItem);
   const totals = calculateTotals(calculated);
+  const text = generateReportText();
+
+  const chatId = tg?.initDataUnsafe?.user?.id || null;
+  const initData = tg?.initData || '';
 
   const payload = {
     action: 'water_report',
+    chatId,
+    initData,
     totals,
     text,
     items: calculated.map(c => ({
@@ -753,38 +758,38 @@ async function sendReportToTelegram() {
     }))
   };
 
+  showToast('Надсилаємо звіт...');
+
+  // 1. Пряма відправка через REST API бота (працює завжди з будь-якого типу запуску Mini App)
+  try {
+    const res = await fetch('/api/send-report', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (data.sentInChat) {
+      triggerHaptic('success');
+      showToast('Звіт успішно надіслано у ваш чат Telegram! 🚀');
+      return;
+    }
+  } catch (e) {
+    console.warn('Помилка API /send-report:', e);
+  }
+
+  // 2. Якщо запущено через Keyboard Button
   if (tg && typeof tg.sendData === 'function') {
     try {
       tg.sendData(JSON.stringify(payload));
       triggerHaptic('success');
       showToast('Звіт надіслано в бот!');
       return;
-    } catch (e) {
-      console.warn('sendData error:', e);
-    }
+    } catch (e) {}
   }
 
-  try {
-    const res = await fetch('/api/send-report', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        ...payload,
-        initData: tg?.initData || ''
-      })
-    });
-    const data = await res.json();
-    if (data.success) {
-      triggerHaptic('success');
-      showToast('Звіт надіслано в чат Telegram! 🚀');
-      return;
-    }
-  } catch (e) {
-    console.warn('Backend send error:', e);
-  }
-
+  // 3. Резервний варіант (якщо відкрито поза Telegram)
   await copyReportToClipboard();
-  showToast('Звіт скопійовано! (Вставте в чат Telegram)');
+  showToast('Звіт скопійовано! В чаті бота введіть /report 📋');
 }
 
 // ЗАКРИТТЯ ПЕРІОДУ

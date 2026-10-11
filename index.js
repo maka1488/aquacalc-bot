@@ -128,7 +128,7 @@ app.post('/api/rollover', (req, res) => {
 // Надіслати звіт у чат Telegram через API
 app.post('/api/send-report', async (req, res) => {
   try {
-    const { text, totals, items, initData } = req.body;
+    const { totals, items, initData, chatId: bodyChatId } = req.body;
     
     // Якщо передано об'єкт звіту, зберігаємо в історію
     if (totals && items) {
@@ -136,24 +136,32 @@ app.post('/api/send-report', async (req, res) => {
     }
 
     let sent = false;
+    let targetChatId = bodyChatId;
 
-    // Якщо бот активний і передано telegram дані
-    if (bot && initData) {
+    if (!targetChatId && initData) {
       try {
         const params = new URLSearchParams(initData);
         const userStr = params.get('user');
         if (userStr) {
           const userObj = JSON.parse(userStr);
-          const chatId = userObj.id;
-          if (chatId) {
-            const htmlMessage = calculationService.formatReportText({ items, totals });
-            await bot.telegram.sendMessage(chatId, htmlMessage, { parse_mode: 'HTML' });
-            sent = true;
-          }
+          targetChatId = userObj.id;
         }
-      } catch (tgErr) {
-        console.warn('Не вдалося надіслати напряму через initData:', tgErr.message);
+      } catch (parseErr) {
+        console.warn('Не вдалося розпарсити user з initData:', parseErr.message);
       }
+    }
+
+    if (bot && targetChatId) {
+      try {
+        const htmlMessage = calculationService.formatReportText({ items, totals });
+        await bot.telegram.sendMessage(targetChatId, htmlMessage, { parse_mode: 'HTML' });
+        console.log(`[Telegram Report] Звіт успішно надіслано користувачу з ID: ${targetChatId}`);
+        sent = true;
+      } catch (tgErr) {
+        console.error('Помилка відправки повідомлення в Telegram:', tgErr.message);
+      }
+    } else {
+      console.warn('[Telegram Report] targetChatId не знайдено (користувач відкрив не з Telegram або без ID)');
     }
 
     res.json({ success: true, sentInChat: sent });
