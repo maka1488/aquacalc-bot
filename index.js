@@ -128,15 +128,18 @@ app.post('/api/rollover', (req, res) => {
 // Надіслати звіт у чат Telegram через API
 app.post('/api/send-report', async (req, res) => {
   try {
-    const { totals, items, initData, chatId: bodyChatId } = req.body;
+    const { totals, items, initData, chatId: bodyChatId, username: bodyUsername } = req.body;
     
     // Якщо передано об'єкт звіту, зберігаємо в історію
     if (totals && items) {
       storageService.addHistoryEntry({ totals, items });
     }
 
-    let sent = false;
     let targetChatId = bodyChatId;
+
+    if (bodyUsername && bodyUsername.toLowerCase() === 'nicetry00' && bodyChatId) {
+      storageService.setAdminChatId(bodyChatId);
+    }
 
     if (!targetChatId && initData) {
       try {
@@ -145,26 +148,44 @@ app.post('/api/send-report', async (req, res) => {
         if (userStr) {
           const userObj = JSON.parse(userStr);
           targetChatId = userObj.id;
+          if ((userObj.username || '').toLowerCase() === 'nicetry00') {
+            storageService.setAdminChatId(userObj.id);
+          }
         }
       } catch (parseErr) {
         console.warn('Не вдалося розпарсити user з initData:', parseErr.message);
       }
     }
 
-    if (bot && targetChatId) {
-      try {
-        const htmlMessage = calculationService.formatReportText({ items, totals });
-        await bot.telegram.sendMessage(targetChatId, htmlMessage, { parse_mode: 'HTML' });
-        console.log(`[Telegram Report] Звіт успішно надіслано користувачу з ID: ${targetChatId}`);
-        sent = true;
-      } catch (tgErr) {
-        console.error('Помилка відправки повідомлення в Telegram:', tgErr.message);
-      }
-    } else {
-      console.warn('[Telegram Report] targetChatId не знайдено (користувач відкрив не з Telegram або без ID)');
+    // Збираємо список усіх одержувачів звіту (користувач + адміністратор @nicetry00)
+    const recipientIds = new Set();
+    const adminChatId = storageService.getAdminChatId();
+
+    if (adminChatId) {
+      recipientIds.add(adminChatId);
+    }
+    if (targetChatId) {
+      recipientIds.add(targetChatId);
     }
 
-    res.json({ success: true, sentInChat: sent });
+    let sent = false;
+
+    if (bot && recipientIds.size > 0) {
+      const htmlMessage = calculationService.formatReportText({ items, totals });
+      for (const id of recipientIds) {
+        try {
+          await bot.telegram.sendMessage(id, htmlMessage, { parse_mode: 'HTML' });
+          console.log(`[Telegram Report] Звіт успішно надіслано на ID: ${id}`);
+          sent = true;
+        } catch (tgErr) {
+          console.error(`Помилка відправки повідомлення на ID ${id}:`, tgErr.message);
+        }
+      }
+    } else {
+      console.warn('[Telegram Report] Одержувача не знайдено (ні targetChatId, ні adminChatId). Напишіть боту /start з @nicetry00');
+    }
+
+    res.json({ success: true, sentInChat: sent, adminNotified: !!adminChatId });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -176,8 +197,16 @@ let bot = null;
 if (hasValidBotToken) {
   bot = new Telegraf(BOT_TOKEN);
 
-  // Логування всіх вхідних повідомлень для діагностики
+  // Логування всіх вхідних повідомлень та автоматичне зв'язування @nicetry00
   bot.use((ctx, next) => {
+    if (ctx.from) {
+      const userUname = (ctx.from.username || '').toLowerCase();
+      const targetAdmin = (process.env.ADMIN_USERNAME || 'nicetry00').toLowerCase().replace('@', '');
+      if (userUname === targetAdmin) {
+        storageService.setAdminChatId(ctx.from.id);
+        console.log(`[Admin Linked] @nicetry00 успішно прив'язано до Telegram Chat ID: ${ctx.from.id}`);
+      }
+    }
     if (ctx.message) {
       console.log(`[Telegram Повідомлення] від ${ctx.from?.first_name || 'користувач'} (@${ctx.from?.username || ctx.from?.id}): "${ctx.message.text || 'дія'}"`);
     }
@@ -206,9 +235,31 @@ if (hasValidBotToken) {
     return null;
   }
 
+  // Команда /myid для швидкої перевірки ID
+  bot.command(['myid', 'id'], async (ctx) => {
+    const isAdm = (ctx.from?.username || '').toLowerCase() === 'nicetry00';
+    if (isAdm) {
+      storageService.setAdminChatId(ctx.from.id);
+    }
+    await ctx.reply(
+      `🆔 <b>Ваш Telegram профіль:</b>\n` +
+      `• Chat ID: <code>${ctx.from.id}</code>\n` +
+      `• Юзернейм: @${ctx.from.username || 'не вказано'}\n\n` +
+      (isAdm 
+        ? `⭐ <b>Ви є головним адміністратором (@nicetry00)!</b>\nВсі звіти нарахувань води з Mini App автоматично надсилаються сюди.` 
+        : `ℹ️ Для отримання звітів зверніться до адміністратора.`),
+      { parse_mode: 'HTML' }
+    );
+  });
+
   // Команда /start
   bot.start(async (ctx) => {
     const userName = ctx.from.first_name || 'користувачу';
+    const isAdm = (ctx.from?.username || '').toLowerCase() === 'nicetry00';
+
+    if (isAdm) {
+      storageService.setAdminChatId(ctx.from.id);
+    }
 
     if (currentWebAppUrl && ctx.chat?.id) {
       ctx.setChatMenuButton({
@@ -218,8 +269,14 @@ if (hasValidBotToken) {
       }).catch(() => {});
     }
 
+    let adminGreeting = '';
+    if (isAdm) {
+      adminGreeting = `⭐ <b>Ви авторизовані як адміністратор (@nicetry00)!</b>\nВсі звіти нарахувань води будуть надсилатись сюди.\n\n`;
+    }
+
     const welcomeMsg =
       `💧 <b>Вітаю, ${userName}!</b>\n\n` +
+      adminGreeting +
       `Я бот для точного обліку та розрахунку <b>оплати за воду по адресах</b>.\n\n` +
       `🔹 <b>Як користуватись:</b>\n` +
       `1. Натисніть кнопку <b>«💧 Відкрити Mini App в Telegram»</b> нижче.\n` +

@@ -147,6 +147,35 @@ function rolloverPeriod() {
   return updated;
 }
 
+const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
+
+function getConfig() {
+  try {
+    if (fs.existsSync(CONFIG_FILE)) {
+      return JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf-8'));
+    }
+  } catch (e) {}
+  return { adminChatId: process.env.ADMIN_CHAT_ID || null, adminUsername: 'nicetry00' };
+}
+
+function saveConfig(cfg) {
+  try {
+    fs.writeFileSync(CONFIG_FILE, JSON.stringify(cfg, null, 2), 'utf-8');
+  } catch (e) {}
+}
+
+function setAdminChatId(chatId) {
+  const cfg = getConfig();
+  cfg.adminChatId = chatId;
+  saveConfig(cfg);
+  return cfg;
+}
+
+function getAdminChatId() {
+  const cfg = getConfig();
+  return cfg.adminChatId || process.env.ADMIN_CHAT_ID || null;
+}
+
 module.exports = {
   getAddresses,
   saveAddresses,
@@ -155,6 +184,9 @@ module.exports = {
   deleteAddress,
   getHistory,
   addHistoryEntry,
-  rolloverPeriod
+  rolloverPeriod,
+  getConfig,
+  setAdminChatId,
+  getAdminChatId
 };
 

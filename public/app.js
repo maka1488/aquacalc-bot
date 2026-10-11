@@ -736,11 +736,13 @@ async function sendReportToTelegram() {
   const text = generateReportText();
 
   const chatId = tg?.initDataUnsafe?.user?.id || null;
+  const username = tg?.initDataUnsafe?.user?.username || '';
   const initData = tg?.initData || '';
 
   const payload = {
     action: 'water_report',
     chatId,
+    username,
     initData,
     totals,
     text,
