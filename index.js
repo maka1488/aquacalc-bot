@@ -125,10 +125,21 @@ app.post('/api/rollover', (req, res) => {
   }
 });
 
+// Статус сервера та прив'язки адміністратора
+app.get('/api/status', (req, res) => {
+  const adminId = storageService.getAdminChatId();
+  res.json({
+    status: 'ok',
+    adminChatId: adminId || null,
+    isAdminConnected: !!adminId,
+    botConnected: !!bot
+  });
+});
+
 // Надіслати звіт у чат Telegram через API
 app.post('/api/send-report', async (req, res) => {
   try {
-    const { totals, items, initData, chatId: bodyChatId, username: bodyUsername } = req.body;
+    const { totals, items, initData, chatId: bodyChatId, username: bodyUsername, text: bodyText } = req.body;
     
     // Якщо передано об'єкт звіту, зберігаємо в історію
     if (totals && items) {
@@ -169,9 +180,17 @@ app.post('/api/send-report', async (req, res) => {
     }
 
     let sent = false;
+    let lastError = null;
 
     if (bot && recipientIds.size > 0) {
-      const htmlMessage = calculationService.formatReportText({ items, totals });
+      let htmlMessage = '';
+      try {
+        htmlMessage = calculationService.formatReportText({ items, totals });
+      } catch (fmtErr) {
+        console.warn('Помилка formatReportText, використовуємо резервний текст:', fmtErr.message);
+        htmlMessage = bodyText || '💧 <b>Звіт нарахувань за воду</b>';
+      }
+
       for (const id of recipientIds) {
         try {
           await bot.telegram.sendMessage(id, htmlMessage, { parse_mode: 'HTML' });
@@ -179,14 +198,22 @@ app.post('/api/send-report', async (req, res) => {
           sent = true;
         } catch (tgErr) {
           console.error(`Помилка відправки повідомлення на ID ${id}:`, tgErr.message);
+          lastError = tgErr.message;
         }
       }
     } else {
-      console.warn('[Telegram Report] Одержувача не знайдено (ні targetChatId, ні adminChatId). Напишіть боту /start з @nicetry00');
+      console.warn('[Telegram Report] Одержувача не знайдено (ні targetChatId, ні adminChatId). Напишіть боту /start або /myid');
     }
 
-    res.json({ success: true, sentInChat: sent, adminNotified: !!adminChatId });
+    res.json({ 
+      success: true, 
+      sentInChat: sent, 
+      adminNotified: !!adminChatId,
+      recipientCount: recipientIds.size,
+      error: lastError
+    });
   } catch (err) {
+    console.error('Помилка в /api/send-report:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -197,14 +224,15 @@ let bot = null;
 if (hasValidBotToken) {
   bot = new Telegraf(BOT_TOKEN);
 
-  // Логування всіх вхідних повідомлень та автоматичне зв'язування @nicetry00
+  // Логування всіх вхідних повідомлень та автоматичне зв'язування адміністратора
   bot.use((ctx, next) => {
     if (ctx.from) {
       const userUname = (ctx.from.username || '').toLowerCase();
       const targetAdmin = (process.env.ADMIN_USERNAME || 'nicetry00').toLowerCase().replace('@', '');
-      if (userUname === targetAdmin) {
+      const hasStoredAdmin = storageService.getAdminChatId();
+      if (userUname === targetAdmin || !hasStoredAdmin) {
         storageService.setAdminChatId(ctx.from.id);
-        console.log(`[Admin Linked] @nicetry00 успішно прив'язано до Telegram Chat ID: ${ctx.from.id}`);
+        console.log(`[Admin Linked] @${ctx.from.username || 'user'} прив'язано до Telegram Chat ID: ${ctx.from.id}`);
       }
     }
     if (ctx.message) {
@@ -237,17 +265,16 @@ if (hasValidBotToken) {
 
   // Команда /myid для швидкої перевірки ID
   bot.command(['myid', 'id'], async (ctx) => {
-    const isAdm = (ctx.from?.username || '').toLowerCase() === 'nicetry00';
-    if (isAdm) {
-      storageService.setAdminChatId(ctx.from.id);
-    }
+    storageService.setAdminChatId(ctx.from.id);
     await ctx.reply(
       `🆔 <b>Ваш Telegram профіль:</b>\n` +
       `• Chat ID: <code>${ctx.from.id}</code>\n` +
       `• Юзернейм: @${ctx.from.username || 'не вказано'}\n\n` +
-      (isAdm 
-        ? `⭐ <b>Ви є головним адміністратором (@nicetry00)!</b>\nВсі звіти нарахувань води з Mini App автоматично надсилаються сюди.` 
-        : `ℹ️ Для отримання звітів зверніться до адміністратора.`),
+      `⭐ <b>Ви підключені як отримувач звітів!</b>\n` +
+      `Всі звіти нарахувань води з Mini App автоматично надсилатимуться сюди.\n\n` +
+      `💡 <i>Для постійного закріплення на Render додайте в Environment Variables:</i>\n` +
+      `• Key: <code>ADMIN_CHAT_ID</code>\n` +
+      `• Value: <code>${ctx.from.id}</code>`,
       { parse_mode: 'HTML' }
     );
   });

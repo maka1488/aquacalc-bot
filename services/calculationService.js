@@ -92,7 +92,10 @@ function calculateAll(addressesList) {
  * Генерація красивого тексту звіту для Telegram / повідомлень
  */
 function formatReportText(calcResult, periodName = '') {
-  const { items, totals } = calcResult;
+  if (!calcResult) return '';
+  const items = Array.isArray(calcResult.items) ? calcResult.items : [];
+  const totals = calcResult.totals || {};
+
   const now = new Date();
   const dateStr = now.toLocaleDateString('uk-UA', {
     day: '2-digit',
@@ -113,35 +116,54 @@ function formatReportText(calcResult, periodName = '') {
 
   items.forEach((item, idx) => {
     const num = idx + 1;
-    const name = item.name.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    
-    if (!item.hasCurrent) {
+    const name = String(item.name || `Адреса ${num}`).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const prev = Number(item.previousReading ?? item.prev ?? 0);
+    const currRaw = item.currentReading ?? item.curr;
+    const hasCurrent = item.hasCurrent ?? (currRaw !== '' && currRaw !== null && currRaw !== undefined && !isNaN(Number(currRaw)));
+    const curr = hasCurrent ? Number(currRaw) : null;
+    const isNegative = item.isNegative ?? (curr !== null && curr < prev);
+
+    if (!hasCurrent) {
       text += `<b>${num}. ${name}</b>\n`;
-      text += `   ⏳ <i>Показник не внесено</i> (Попередній: ${item.previousReading.toFixed(2)} м³)\n\n`;
+      text += `   ⏳ <i>Показник не внесено</i> (Попередній: ${prev.toFixed(2)} м³)\n\n`;
       return;
     }
 
-    if (item.isNegative) {
+    if (isNegative) {
       text += `<b>${num}. ${name}</b>\n`;
-      text += `   ⚠️ <i>Увага: поточний показник (${item.currentReading}) менший за попередній (${item.previousReading})!</i>\n\n`;
+      text += `   ⚠️ <i>Увага: поточний показник (${curr}) менший за попередній (${prev.toFixed(2)})!</i>\n\n`;
       return;
     }
+
+    const consumption = Number(item.effectiveConsumption ?? item.effectiveVolume ?? item.delta ?? Math.max(0, (curr || 0) - prev));
+    const supplyRate = Number(item.supplyRate ?? 0);
+    const drainageRate = Number(item.drainageRate ?? 0);
+    const supplyCost = Number(item.supplyCost ?? round2(consumption * supplyRate));
+    const drainageCost = Number(item.drainageCost ?? round2(consumption * drainageRate));
+    const totalCost = Number(item.totalCost ?? round2(supplyCost + drainageCost));
 
     text += `<b>${num}. ${name}</b>\n`;
-    text += `   • Лічильник: <code>${item.previousReading.toFixed(2)}</code> ➔ <code>${item.currentReading.toFixed(2)} м³</code>\n`;
-    text += `   • Спожито: <b>${item.effectiveConsumption.toFixed(2)} м³</b>\n`;
-    text += `   • 💧 Водопостачання (${item.supplyRate.toFixed(2)} грн/м³): <b>${item.supplyCost.toFixed(2)} грн</b>\n`;
-    text += `   • 🔄 Водовідведення (${item.drainageRate.toFixed(2)} грн/м³): <b>${item.drainageCost.toFixed(2)} грн</b>\n`;
-    text += `   • 💳 Разом по адресі: <b>${item.totalCost.toFixed(2)} грн</b>\n\n`;
+    text += `   • Лічильник: <code>${prev.toFixed(2)}</code> ➔ <code>${(curr !== null ? curr.toFixed(2) : '—')} м³</code>\n`;
+    text += `   • Спожито: <b>${consumption.toFixed(2)} м³</b>\n`;
+    text += `   • 💧 Водопостачання (${supplyRate.toFixed(2)} грн/м³): <b>${supplyCost.toFixed(2)} грн</b>\n`;
+    text += `   • 🔄 Водовідведення (${drainageRate.toFixed(2)} грн/м³): <b>${drainageCost.toFixed(2)} грн</b>\n`;
+    text += `   • 💳 Разом по адресі: <b>${totalCost.toFixed(2)} грн</b>\n\n`;
   });
+
+  const totalSupplyCost = Number(totals.totalSupplyCost ?? totals.totalSupply ?? 0);
+  const totalDrainageCost = Number(totals.totalDrainageCost ?? totals.totalDrainage ?? 0);
+  const grandTotal = Number(totals.grandTotal ?? round2(totalSupplyCost + totalDrainageCost));
+  const totalConsumption = Number(totals.totalConsumption ?? totals.totalVolume ?? 0);
+  const filledCount = Number(totals.filledCount ?? items.filter(i => (i.currentReading ?? i.curr) !== '' && (i.currentReading ?? i.curr) !== null && (i.currentReading ?? i.curr) !== undefined).length);
+  const totalAddresses = Number(totals.totalAddresses ?? items.length);
 
   text += `════════════════════\n`;
   text += `📊 <b>ПІДСУМОК ДО СПЛАТИ:</b>\n`;
-  text += `💧 <b>Водопостачання:</b> <code>${totals.totalSupplyCost.toFixed(2)} грн</code>\n`;
-  text += `🔄 <b>Водовідведення:</b> <code>${totals.totalDrainageCost.toFixed(2)} грн</code>\n`;
-  text += `💰 <b>ЗАГАЛЬНА СУМА:</b> <b>${totals.grandTotal.toFixed(2)} грн</b>\n`;
-  text += `🌊 <b>Загальний об'єм води:</b> ${totals.totalConsumption.toFixed(2)} м³\n`;
-  text += `✅ <b>Заповнено адрес:</b> ${totals.filledCount} із ${totals.totalAddresses}\n`;
+  text += `💧 <b>Водопостачання:</b> <code>${totalSupplyCost.toFixed(2)} грн</code>\n`;
+  text += `🔄 <b>Водовідведення:</b> <code>${totalDrainageCost.toFixed(2)} грн</code>\n`;
+  text += `💰 <b>ЗАГАЛЬНА СУМА:</b> <b>${grandTotal.toFixed(2)} грн</b>\n`;
+  text += `🌊 <b>Загальний об'єм води:</b> ${totalConsumption.toFixed(2)} м³\n`;
+  text += `✅ <b>Заповнено адрес:</b> ${filledCount} із ${totalAddresses}\n`;
 
   return text;
 }

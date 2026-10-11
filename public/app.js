@@ -744,14 +744,22 @@ async function sendReportToTelegram() {
     chatId,
     username,
     initData,
-    totals,
+    totals: {
+      ...totals,
+      totalSupplyCost: totals.totalSupply,
+      totalDrainageCost: totals.totalDrainage,
+      totalConsumption: totals.totalVolume
+    },
     text,
     items: calculated.map(c => ({
       id: c.id,
       name: c.name,
       previousReading: c.prev,
       currentReading: c.curr,
+      hasCurrent: c.hasCurrent,
+      isNegative: c.isNegative,
       delta: c.delta,
+      effectiveConsumption: c.effectiveVolume,
       supplyRate: c.supplyRate,
       drainageRate: c.drainageRate,
       supplyCost: c.supplyCost,
@@ -772,7 +780,17 @@ async function sendReportToTelegram() {
     const data = await res.json();
     if (data.sentInChat) {
       triggerHaptic('success');
-      showToast('Звіт успішно надіслано у ваш чат Telegram! 🚀');
+      showToast('Звіт успішно надіслано в Telegram! 🚀');
+      return;
+    } else if (data.recipientCount === 0) {
+      triggerHaptic('warning');
+      await copyReportToClipboard();
+      showToast('⚠️ Напишіть боту /start або /myid в Telegram, а звіт скопійовано! 📋');
+      return;
+    } else if (data.error) {
+      triggerHaptic('error');
+      await copyReportToClipboard();
+      showToast('⚠️ Помилка: ' + data.error + '. Текст скопійовано! 📋');
       return;
     }
   } catch (e) {
