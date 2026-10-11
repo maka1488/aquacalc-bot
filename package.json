@@ -1,0 +1,26 @@
+{
+  "name": "water-calc-telegram-bot",
+  "version": "1.0.0",
+  "description": "Telegram Mini App & Bot для розрахунку вартості води для 10 адрес (водопостачання та водовідведення)",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js"
+  },
+  "keywords": [
+    "telegram-mini-app",
+    "water-calculation",
+    "utility-bills",
+    "telegram-bot"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "telegraf": "^4.16.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

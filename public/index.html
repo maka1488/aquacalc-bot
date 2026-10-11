@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>💧 Калькулятор води</title>
+  
+  <!-- Telegram WebApp SDK -->
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-container">
+    
+    <!-- Header -->
+    <header class="app-header">
+      <div class="header-top">
+        <div class="brand">
+          <div class="brand-icon">💧</div>
+          <div class="brand-text">
+            <h1>AquaCalc</h1>
+            <p id="appSubtitle">Облік води по адресах</p>
+          </div>
+        </div>
+        <div class="header-actions">
+          <button id="btnTariffModal" class="icon-btn" title="Налаштування тарифів">
+            ⚙️ <span>Тарифи</span>
+          </button>
+          <button id="btnHistoryModal" class="icon-btn" title="Історія розрахунків">
+            📜 <span>Історія</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Live Summary Dashboard (Floating Top Card) -->
+      <div class="summary-card">
+        <div class="summary-top">
+          <div class="summary-title-row">
+            <span class="summary-badge">📊 ПІДСУМОК ДО СПЛАТИ</span>
+            <span id="filledCounterBadge" class="counter-badge">0 / 10 заповнено</span>
+          </div>
+          <div class="grand-total-row">
+            <span class="grand-total-label">Загальна сума:</span>
+            <span id="grandTotalDisplay" class="grand-total-value">0.00 <small>грн</small></span>
+          </div>
+        </div>
+
+        <div class="summary-breakdown-grid">
+          <div class="breakdown-item supply-pill">
+            <div class="pill-header">
+              <span class="pill-icon">💧</span>
+              <span class="pill-name">Водопостачання</span>
+            </div>
+            <div class="pill-amount" id="totalSupplyDisplay">0.00 грн</div>
+          </div>
+
+          <div class="breakdown-item drainage-pill">
+            <div class="pill-header">
+              <span class="pill-icon">🔄</span>
+              <span class="pill-name">Водовідведення</span>
+            </div>
+            <div class="pill-amount" id="totalDrainageDisplay">0.00 грн</div>
+          </div>
+        </div>
+
+        <div class="summary-footer-row">
+          <div class="stat-meta">
+            <span>🌊 Загальний об'єм:</span>
+            <b id="totalVolumeDisplay">0.00 м³</b>
+          </div>
+          <button id="btnQuickReport" class="text-link-btn">
+            👁️ Переглянути чек
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Content: Address Cards List -->
+    <main class="addresses-section">
+      <div class="section-header">
+        <div class="section-header-title-row">
+          <h2 id="sectionTitle">📍 Список адрес (10)</h2>
+          <button id="btnOpenAddAddress" class="icon-btn btn-add-address" title="Додати нову адресу">
+            ➕ <span>Додати адресу</span>
+          </button>
+        </div>
+        <div class="quick-filter-row">
+          <button class="filter-chip active" data-filter="all" id="filterChipAll">Всі (10)</button>
+          <button class="filter-chip" data-filter="filled" id="filterChipFilled">Заповнені</button>
+          <button class="filter-chip" data-filter="empty" id="filterChipEmpty">Очікують</button>
+        </div>
+      </div>
+
+      <div id="addressesList" class="cards-list">
+        <!-- Rendered dynamically by app.js -->
+        <div class="loading-state">
+          <div class="spinner"></div>
+          <p>Завантаження адрес...</p>
+        </div>
+      </div>
+    </main>
+
+    <!-- Sticky Bottom Bar -->
+    <div class="sticky-bottom-bar" id="stickyBottomBar">
+      <button id="btnShareReport" class="btn-primary">
+        🚀 <span>Звіт в Telegram</span>
+      </button>
+      <button id="btnCopyReport" class="btn-secondary" title="Скопіювати в буфер">
+        📋 <span>Копіювати</span>
+      </button>
+      <button id="btnRolloverPeriod" class="btn-warning" title="Зберегти та почати новий місяць">
+        🔄 <span>Закрити період</span>
+      </button>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast">Повідомлення</div>
+
+    <!-- MODAL: Внесення показника лічильника з кнопкою ОК -->
+    <div id="readingModal" class="modal-overlay">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3 id="readingModalTitle">⏱️ Внесення показника</h3>
+          <button class="modal-close" data-close="readingModal">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="reading-address-banner">
+            <span class="banner-badge" id="readingModalBadge">Адреса #1</span>
+            <h4 id="readingModalAddressName">вул. Шевченка, 12</h4>
+          </div>
+
+          <div class="prev-info-box">
+            <span class="prev-info-label">Попередній внесений показник:</span>
+            <b class="prev-info-val" id="readingModalPrevVal">0.00 м³</b>
+          </div>
+
+          <div class="input-field reading-input-field">
+            <label for="inputModalReading">Поточний показник лічильника:</label>
+            <div class="modal-input-wrapper">
+              <input 
+                type="number" 
+                step="0.01" 
+                id="inputModalReading" 
+                class="modal-large-meter-input" 
+                placeholder="0.00" 
+                inputmode="decimal"
+              />
+              <span class="unit-tag">м³</span>
+            </div>
+          </div>
+
+          <!-- Live calculation preview inside modal -->
+          <div id="modalCalcBox" class="modal-calc-preview">
+            <div class="preview-row preview-volume">
+              <span>Спожитий об'єм (Δ):</span>
+              <b id="modalCalcVolume">0.00 м³</b>
+            </div>
+            <div class="preview-dual-grid">
+              <div class="preview-cell">
+                <span class="cell-sublabel">💧 Водопостачання</span>
+                <span class="cell-rate" id="modalCalcSupplyRate">0.00 грн/м³</span>
+                <b class="cell-cost" id="modalCalcSupplyCost">0.00 грн</b>
+              </div>
+              <div class="preview-cell">
+                <span class="cell-sublabel">🔄 Водовідведення</span>
+                <span class="cell-rate" id="modalCalcDrainageRate">0.00 грн/м³</span>
+                <b class="cell-cost" id="modalCalcDrainageCost">0.00 грн</b>
+              </div>
+            </div>
+            <div class="preview-row preview-total">
+              <span>💳 Разом по адресі:</span>
+              <b id="modalCalcTotalCost">0.00 грн</b>
+            </div>
+            <div id="modalCalcWarning" class="modal-warning-msg" style="display: none;">
+              ⚠️ Поточний показник менший за попередній!
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-secondary" data-close="readingModal">Скасувати</button>
+          <button id="btnModalConfirmReading" class="btn-primary btn-large">
+            <span>✅ ОК (Підтвердити)</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL: Додати нову адресу -->
+    <div id="addAddressModal" class="modal-overlay">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>➕ Додати нову адресу</h3>
+          <button class="modal-close" data-close="addAddressModal">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="input-field">
+            <label for="newAddressName">Назва або адреса:</label>
+            <input type="text" id="newAddressName" placeholder="напр. вул. Садова, 10, кв. 14" />
+          </div>
+          <div class="input-field" style="margin-top: 12px;">
+            <label for="newAddressPrev">Початковий показник лічильника (м³):</label>
+            <input type="number" step="0.01" min="0" id="newAddressPrev" placeholder="0.00" value="0" />
+          </div>
+          <div class="bulk-inputs-row" style="margin-top: 12px;">
+            <div class="input-field">
+              <label for="newAddressSupplyRate">💧 Тариф води (грн/м³):</label>
+              <input type="number" step="0.01" min="0" id="newAddressSupplyRate" value="23.00" />
+            </div>
+            <div class="input-field">
+              <label for="newAddressDrainageRate">🔄 Тариф стоку (грн/м³):</label>
+              <input type="number" step="0.01" min="0" id="newAddressDrainageRate" value="16.50" />
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-secondary" data-close="addAddressModal">Скасувати</button>
+          <button id="btnSaveNewAddress" class="btn-primary">➕ Додати адресу</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL: Видалення адреси -->
+    <div id="deleteAddressModal" class="modal-overlay">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>🗑️ Видалення адреси</h3>
+          <button class="modal-close" data-close="deleteAddressModal">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p>Ви дійсно бажаєте видалити цю адресу зі списку?</p>
+          <div class="alert-box" style="margin-top: 10px; background: rgba(244, 63, 94, 0.15); border-color: rgba(244, 63, 94, 0.4); color: #fecdd3;">
+            <b id="deleteAddressModalName">Адреса</b>
+          </div>
+          <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 6px;">
+            Всі поточні нарахування та показники для цієї адреси будуть видалені з загального підсумку.
+          </p>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-secondary" data-close="deleteAddressModal">Скасувати</button>
+          <button id="btnConfirmDeleteAddress" class="btn-warning" style="background: #e11d48; color: #fff; border: none;">
+            🗑️ Так, видалити
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL: Tariff Settings -->
+    <div id="tariffModal" class="modal-overlay">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>⚙️ Налаштування тарифів та адрес</h3>
+          <button class="modal-close" data-close="tariffModal">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p class="modal-desc">
+            Ціна за водопостачання та водовідведення може відрізнятись для кожної адреси. Ви можете змінити тариф для окремої адреси або встановити однаковий для всіх.
+          </p>
+
+          <div class="bulk-rate-box">
+            <h4>⚡ Швидко встановити тариф для ВСІХ адрес:</h4>
+            <div class="bulk-inputs-row">
+              <div class="input-field">
+                <label>💧 Водопостачання (грн/м³)</label>
+                <input type="number" id="bulkSupplyRate" step="0.01" min="0" placeholder="напр. 23.50">
+              </div>
+              <div class="input-field">
+                <label>🔄 Водовідведення (грн/м³)</label>
+                <input type="number" id="bulkDrainageRate" step="0.01" min="0" placeholder="напр. 16.80">
+              </div>
+            </div>
+            <button id="btnApplyBulkRates" class="btn-subtle">
+              Застосувати до всіх адрес
+            </button>
+          </div>
+
+          <hr class="modal-divider">
+
+          <h4>📍 Індивідуальні тарифи та назви адрес:</h4>
+          <div id="tariffAddressesList" class="tariff-addresses-list">
+            <!-- Rendered by app.js -->
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-secondary" data-close="tariffModal">Скасувати</button>
+          <button id="btnSaveTariffs" class="btn-primary">Зберегти тарифи</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL: Full Report Preview -->
+    <div id="reportModal" class="modal-overlay">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>🧾 Повний звіт до сплати</h3>
+          <button class="modal-close" data-close="reportModal">&times;</button>
+        </div>
+        <div class="modal-body">
+          <pre id="reportTextPreview" class="report-preview-box"></pre>
+        </div>
+        <div class="modal-footer">
+          <button id="btnModalCopy" class="btn-secondary">📋 Скопіювати текст</button>
+          <button id="btnModalSendTg" class="btn-primary">🚀 Надіслати в чат</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL: History Modal -->
+    <div id="historyModal" class="modal-overlay">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>📜 Історія розрахунків</h3>
+          <button class="modal-close" data-close="historyModal">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div id="historyList" class="history-list">
+            <!-- Rendered dynamically -->
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-secondary" data-close="historyModal">Закрити</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL: Rollover Confirmation -->
+    <div id="rolloverModal" class="modal-overlay">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>🔄 Закриття поточного періоду</h3>
+          <button class="modal-close" data-close="rolloverModal">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="alert-box">
+            <b>Увага!</b> При переході на новий період:
+            <ul>
+              <li>Поточні внесені показники стануть новими <b>попередніми</b> показниками.</li>
+              <li>Поля поточних показників очистяться для нового місяця.</li>
+              <li>Поточний розрахунок збережеться в <b>історію</b>.</li>
+            </ul>
+          </div>
+          <p>Бажаєте закрити період зараз?</p>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-secondary" data-close="rolloverModal">Скасувати</button>
+          <button id="btnConfirmRollover" class="btn-primary">Так, закрити період</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

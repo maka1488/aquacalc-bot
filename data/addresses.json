@@ -1,0 +1,65 @@
+[
+  {
+    "id": 1,
+    "name": "Ряшівська 9",
+    "previousReading": 145,
+    "currentReading": "150",
+    "supplyRate": 37,
+    "drainageRate": 21,
+    "note": ""
+  },
+  {
+    "id": 2,
+    "name": "Адреса 2 (вул. Франка, 45, кв. 18)",
+    "previousReading": 89.2,
+    "currentReading": "",
+    "supplyRate": 37,
+    "drainageRate": 21,
+    "note": ""
+  },
+  {
+    "id": 3,
+    "name": "Адреса 3 (просп. Соборний, 110, оф. 2)",
+    "previousReading": 210.5,
+    "currentReading": "",
+    "supplyRate": 37,
+    "drainageRate": 21,
+    "note": ""
+  },
+  {
+    "id": 4,
+    "name": "Адреса 4 (вул. Лесі Українки, 7, кв. 32)",
+    "previousReading": 64,
+    "currentReading": "",
+    "supplyRate": 37,
+    "drainageRate": 21,
+    "note": ""
+  },
+  {
+    "id": 5,
+    "name": "Адреса 5 (вул. Грушевського, 28, кв. 11)",
+    "previousReading": 312.4,
+    "currentReading": "",
+    "supplyRate": 37,
+    "drainageRate": 21,
+    "note": ""
+  },
+  {
+    "id": 6,
+    "name": "Адреса 6 (вул. Богдана Хмельницького, 3, кв. 9)",
+    "previousReading": 178.6,
+    "currentReading": "",
+    "supplyRate": 37,
+    "drainageRate": 21,
+    "note": ""
+  },
+  {
+    "id": 7,
+    "name": "Адреса 7 (вул. Садова, 15, кв. 22)",
+    "previousReading": 95,
+    "currentReading": "",
+    "supplyRate": 37,
+    "drainageRate": 21,
+    "note": ""
+  }
+]
