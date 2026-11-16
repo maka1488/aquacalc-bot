@@ -520,6 +520,8 @@ if (hasValidBotToken) {
     if (currentWebAppUrl) {
       updateMenuButton(currentWebAppUrl);
     }
+    // Ініціалізація збереження даних у Telegram Cloud
+    storageService.initTelegramCloud(bot);
   }).catch(err => {
     console.error('Помилка авторизації бота:', err.message);
   });
@@ -584,7 +586,27 @@ function startCloudflareTunnel(port) {
   }
 }
 
-// ==================== 4. СТАРТ СЕРВЕРА ====================
+// ==================== 4. АВТОМАТИЧНИЙ KEEP-ALIVE ДЛЯ RENDER ====================
+function startKeepAlivePing() {
+  const targetUrl = process.env.WEBAPP_URL || (process.env.RENDER_EXTERNAL_URL ? `${process.env.RENDER_EXTERNAL_URL}` : null);
+  if (!targetUrl || targetUrl.includes('localhost') || targetUrl.includes('127.0.0.1')) {
+    return;
+  }
+
+  const pingUrl = targetUrl.replace(/\/$/, '') + '/api/status';
+  console.log(`⏱️ Автоматичний Keep-Alive запущено для: ${pingUrl} (інтервал: 9 хв)`);
+
+  setInterval(() => {
+    try {
+      fetch(pingUrl)
+        .then(r => r.json())
+        .then(() => console.log(`[Keep-Alive] Сервер активний (${new Date().toLocaleTimeString('uk-UA')})`))
+        .catch(err => console.warn('[Keep-Alive Ping Error]:', err.message));
+    } catch (e) {}
+  }, 9 * 60 * 1000);
+}
+
+// ==================== 5. СТАРТ СЕРВЕРА ====================
 app.listen(PORT, () => {
   console.log(`\n💧 AquaCalc сервер запущено на http://localhost:${PORT}`);
   console.log(`📱 Локальний доступ у браузері: http://localhost:${PORT}`);
@@ -593,4 +615,6 @@ app.listen(PORT, () => {
   if (!process.env.WEBAPP_URL && process.env.AUTO_TUNNEL !== 'false') {
     startCloudflareTunnel(PORT);
   }
+
+  startKeepAlivePing();
 });

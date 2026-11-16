@@ -152,12 +152,103 @@ function calculateTotals(calculatedList) {
   };
 }
 
-// ==================== 4. СИНХРОНІЗАЦІЯ ДАНИХ ====================
+// ==================== 4. СИНХРОНІЗАЦІЯ ДАНИХ (ХМАРА + LOCALSTORAGE) ====================
+function saveToCloudStorage(data) {
+  if (window.Telegram?.WebApp?.CloudStorage) {
+    try {
+      window.Telegram.WebApp.CloudStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(data), (err) => {
+        if (err) console.warn('[CloudStorage] Помилка збереження:', err);
+      });
+    } catch (e) {}
+  }
+}
+
+function getFromCloudStorage() {
+  return new Promise((resolve) => {
+    if (window.Telegram?.WebApp?.CloudStorage) {
+      try {
+        window.Telegram.WebApp.CloudStorage.getItem(LOCAL_STORAGE_KEY, (err, val) => {
+          if (!err && val) {
+            try {
+              const parsed = JSON.parse(val);
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                return resolve(parsed);
+              }
+            } catch (e) {}
+          }
+          resolve(null);
+        });
+        return;
+      } catch (e) {}
+    }
+    resolve(null);
+  });
+}
+
+/**
+ * Розумне злиття: запобігає затиранню внесених користувачем показників порожніми даними сервера
+ */
+function mergeAddresses(localList, serverList) {
+  if (!Array.isArray(serverList) || serverList.length === 0) return { merged: localList, localHadChanges: false };
+  if (!Array.isArray(localList) || localList.length === 0) return { merged: serverList, localHadChanges: false };
+
+  let localHadChanges = false;
+
+  const merged = serverList.map(serverItem => {
+    const localItem = localList.find(l => Number(l.id) === Number(serverItem.id));
+    if (!localItem) return serverItem;
+
+    const localCurr = localItem.currentReading !== null && localItem.currentReading !== undefined && String(localItem.currentReading).trim() !== ''
+      ? String(localItem.currentReading).trim()
+      : '';
+    const serverCurr = serverItem.currentReading !== null && serverItem.currentReading !== undefined && String(serverItem.currentReading).trim() !== ''
+      ? String(serverItem.currentReading).trim()
+      : '';
+
+    let chosenCurr = serverCurr;
+    let chosenUpdatedAt = serverItem.updatedAt || 0;
+
+    // Якщо локально користувач ввів свіжий показник, а на сервері пусто (після перезапуску Render)
+    if (localCurr !== '' && serverCurr === '') {
+      chosenCurr = localCurr;
+      chosenUpdatedAt = localItem.updatedAt || Date.now();
+      localHadChanges = true;
+    } else if (localCurr !== '' && serverCurr !== '') {
+      // Якщо обидва заповнені, беремо новіший
+      if ((localItem.updatedAt || 0) > (serverItem.updatedAt || 0)) {
+        chosenCurr = localCurr;
+        chosenUpdatedAt = localItem.updatedAt;
+        if (localCurr !== serverCurr) {
+          localHadChanges = true;
+        }
+      }
+    }
+
+    return {
+      ...serverItem,
+      currentReading: chosenCurr,
+      updatedAt: chosenUpdatedAt
+    };
+  });
+
+  return { merged, localHadChanges };
+}
+
 async function loadData() {
+  // 1. Спочатку завантажуємо з LocalStorage для миттєвого показу
   try {
     const cached = localStorage.getItem(LOCAL_STORAGE_KEY);
     if (cached) {
       addresses = JSON.parse(cached);
+    }
+  } catch (e) {}
+
+  // 2. Перевіряємо хмарне сховище Telegram (CloudStorage)
+  try {
+    const cloudCached = await getFromCloudStorage();
+    if (cloudCached && Array.isArray(cloudCached) && cloudCached.length > 0) {
+      const { merged } = mergeAddresses(addresses, cloudCached);
+      addresses = merged;
     }
   } catch (e) {}
 
@@ -168,14 +259,22 @@ async function loadData() {
   // МИТТЄВИЙ РЕНДЕР
   renderApp();
 
+  // 3. Синхронізація з сервером (Render)
   try {
     const res = await fetch('/api/addresses');
     if (res.ok) {
       const serverData = await res.json();
       if (Array.isArray(serverData) && serverData.length > 0) {
-        addresses = serverData;
+        // Розумне злиття: не стираємо заповнені показники порожніми значеннями з сервера!
+        const { merged, localHadChanges } = mergeAddresses(addresses, serverData);
+        addresses = merged;
         saveToLocalStorage();
         renderApp();
+
+        // Якщо у клієнта були свіжіші дані, одразу надсилаємо їх на сервер
+        if (localHadChanges) {
+          syncWithServer();
+        }
       }
     }
   } catch (err) {
@@ -186,6 +285,7 @@ async function loadData() {
 function saveToLocalStorage() {
   try {
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(addresses));
+    saveToCloudStorage(addresses);
   } catch (e) {
     console.warn('LocalStorage save error:', e);
   }
@@ -197,7 +297,8 @@ async function syncWithServer() {
     await fetch('/api/addresses', {
       method: 'POST',
       headers: getAuthHeaders(),
-      body: JSON.stringify(addresses)
+      body: JSON.stringify(addresses),
+      keepalive: true
     });
   } catch (e) {}
 }
@@ -207,8 +308,12 @@ function debouncedSync() {
   clearTimeout(syncTimeout);
   syncTimeout = setTimeout(() => {
     syncWithServer();
-  }, 1000);
+  }, 500);
 }
+
+// Запобігаємо втраті даних при закритті вкладки/вебв'ю
+window.addEventListener('pagehide', () => syncWithServer());
+window.addEventListener('beforeunload', () => syncWithServer());
 
 // ==================== 5. РЕНДЕРИНГ ====================
 function renderApp() {
@@ -560,8 +665,9 @@ if (btnModalClearReadingEl) {
     if (!item) return;
 
     item.currentReading = '';
+    item.updatedAt = Date.now();
     saveToLocalStorage();
-    debouncedSync();
+    syncWithServer();
     renderApp();
     closeModal('readingModal');
     triggerHaptic('warning');
@@ -597,9 +703,10 @@ function confirmReading() {
   const newCurr = inputVal !== '' ? parseFloat(inputVal) : NaN;
 
   item.currentReading = inputVal;
+  item.updatedAt = Date.now();
 
   saveToLocalStorage();
-  debouncedSync();
+  syncWithServer();
   renderApp();
   closeModal('readingModal');
   triggerHaptic('success');
